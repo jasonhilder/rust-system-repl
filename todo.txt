@@ -1,0 +1,9 @@
+TODO:
+- setup a loading status for the ui and a global message to inform user whats happening
+- use docker crate to create/start/stop
+- setup tmp location in docker
+- on app startup, startup function -> sets up base docker image
+- on app close delete temp files, shutdown function -> stop docker image
+- toggle error output on window
+- make a textbox none editable
+- get tab key working
