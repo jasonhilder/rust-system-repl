@@ -1,12 +1,34 @@
+use std::fs;
+use futures_util::TryStreamExt;
 use bollard::Docker;
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::image::CreateImageOptions;
-use druid::widget::{Align, Controller, CrossAxisAlignment, Flex, TextBox, Spinner};
 use druid::{
-    AppDelegate, AppLauncher, Command, Data, Env, Event, EventCtx, Lens, LocalizedString, Widget, WidgetExt, WindowDesc, Selector, Target, DelegateCtx, Handled,
+    AppDelegate, 
+    AppLauncher, 
+    Command, 
+    Data, 
+    Env, 
+    Event, 
+    EventCtx, 
+    Lens, 
+    LocalizedString, 
+    Widget, 
+    WidgetExt, 
+    WindowDesc, 
+    Selector, 
+    Target, 
+    DelegateCtx, 
+    Handled, 
+    widget:: {
+        Align, 
+        Controller, 
+        CrossAxisAlignment, 
+        Flex,
+        TextBox, 
+        Spinner
+    }
 };
-use futures_util::TryStreamExt;
-use std::{fs, thread};
 
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const WINDOW_TITLE: LocalizedString<AppState> = LocalizedString::new("RJSI");
@@ -58,7 +80,6 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
     }
 }
 struct Delegate;
-
 
 impl AppDelegate<AppState> for Delegate {
     fn command(
@@ -198,8 +219,6 @@ async fn main() {
         loading_msg: "".to_string()
     };
 
-    // setup docker
-
     // describe the main window
     let main_window = WindowDesc::new(build_app)
         .title(WINDOW_TITLE)
@@ -211,7 +230,7 @@ async fn main() {
 
     println!("before");
 
-    // works with tokio spawn vs thread::spawn
+    // works with tokio spawn rather than thread::spawn
     // as I need an async function for docker api
     tokio::spawn(async {
         setup_container(event_sink).await
