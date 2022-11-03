@@ -1,9 +1,20 @@
 TODO:
-- setup a loading status for the ui and a global message to inform user whats happening
-- use docker crate to create/start/stop
+- create a critical error modal for panic messages etc
+- setup error handling strategy
+- split code logically
 - setup tmp location in docker
-- on app startup, startup function -> sets up base docker image
-- on app close delete temp files, shutdown function -> stop docker image
 - toggle error output on window
 - make a textbox none editable
 - get tab key working
+
+WORKING ON:
+- on startup set containerid so we can exec into it from anypoint
+- setup volume on create
+- create language setup functions, node, rust etc
+- run node setupfunction
+- shutdown function -> stop docker image
+
+DONE:
+- setup a loading status for the ui and a global message to inform user whats happening
+- use docker crate to create/start/stop
+- on app startup, startup function -> sets up base docker image
