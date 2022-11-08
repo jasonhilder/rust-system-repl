@@ -52,10 +52,15 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
             //TODO write the text_box to file
             println!("{}", &data.text_box);
 
-            if data.text_box.len() > 0 {
+            /*
+                1. Investigate if you can create an Arc for this and then clone the pointer (you'd need to lock; check tokio docs)
+                    then you'd be passing down a ptr clone instead of a full docker struct.
+            */
+            let c = self.docker_con.clone();
 
-                tokio::spawn(async {
-                    let x = self.docker_con
+            if data.text_box.len() > 0 {
+                tokio::spawn(async move {
+                    let x = c
                         .create_exec(
                             docker_coms::CONTAINER_NAME,
                             CreateExecOptions {
@@ -68,7 +73,7 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
                         .await.unwrap()
                         .id;
 
-                        if let StartExecResults::Attached { mut output, .. } = self.docker_con.start_exec(&x, None).await.unwrap() {
+                        if let StartExecResults::Attached { mut output, .. } = c.start_exec(&x, None).await.unwrap() {
                             while let Some(Ok(msg)) = output.next().await {
                                 print!("{}", msg);
                             }
