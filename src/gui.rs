@@ -1,4 +1,5 @@
-use bollard::Docker;
+use crate::docker_coms;
+use bollard::{Docker, exec::{CreateExecOptions, StartExecResults}};
 use druid::{
     LocalizedString,
     Widget,
@@ -17,6 +18,7 @@ use druid::{
         Spinner, Controller
     }
 };
+use futures_util::StreamExt;
 
 const WINDOW_TITLE: LocalizedString<AppState> = LocalizedString::new("RJSI");
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
@@ -52,42 +54,29 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
 
             if data.text_box.len() > 0 {
 
-                // tokio::spawn_blocking(async {
-                //     let x = self.docker_con
-                //         .create_exec(
-                //             CONTAINER_NAME,
-                //             CreateExecOptions {
-                //                 attach_stdout: Some(true),
-                //                 attach_stderr: Some(true),
-                //                 cmd: Some(vec![
-                //                     "mkdir", "-p", "rusty-repl/node/",
-                //                     "&&", "touch","rusty-repl/node/main.js"
-                //                 ]),
-                //                 ..Default::default()
-                //             },
-                //         )
-                //         .await.unwrap()
-                //         .id;
-                //
-                //         if let StartExecResults::Attached { mut output, .. } = self.docker_con.start_exec(&x, None).await.unwrap() {
-                //             while let Some(Ok(msg)) = output.next().await {
-                //                 print!("{}", msg);
-                //             }
-                //         } else {
-                //             unreachable!();
-                //         }
-                // });
+                tokio::spawn(async {
+                    let x = self.docker_con
+                        .create_exec(
+                            docker_coms::CONTAINER_NAME,
+                            CreateExecOptions {
+                                attach_stdout: Some(true),
+                                attach_stderr: Some(true),
+                                cmd: Some(vec!["node", "rusty-repl/node/main.js"]),
+                                ..Default::default()
+                            },
+                        )
+                        .await.unwrap()
+                        .id;
 
-                // let out = Command::new("node")
-                //     .arg("./index.js")
-                //     .output()
-                //     .expect("node issues yer");
-
-                //let stdo = String::from_utf8_lossy(&out.stdout);
-                // println!("stdout: {}", stdo);
-                // data.output_box = stdo.to_string()
+                        if let StartExecResults::Attached { mut output, .. } = self.docker_con.start_exec(&x, None).await.unwrap() {
+                            while let Some(Ok(msg)) = output.next().await {
+                                print!("{}", msg);
+                            }
+                        } else {
+                            unreachable!();
+                    }
+                });
             }
-
             // println!("{}", out.status);
             // println!("stderr: {}", String::from_utf8_lossy(&out.stderr));
         }

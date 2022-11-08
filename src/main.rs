@@ -1,5 +1,5 @@
 mod gui;
-mod docker_connection;
+mod docker_coms;
 
 use gui::{build_window, AppState};
 use bollard::{
@@ -27,7 +27,7 @@ impl AppDelegate<AppState> for Delegate {
         data: &mut AppState,
         _env: &Env,
     ) -> Handled {
-        if let Some(msg) = cmd.get(docker_connection::UPDATE_MSG) {
+        if let Some(msg) = cmd.get(docker_coms::UPDATE_MSG) {
             // If the command we received is `FINISH_SLOW_FUNCTION` handle the payload.
             println!("Hand1");
             data.loading_msg = msg.clone();
@@ -68,7 +68,7 @@ async fn main() {
     // as I need an async function for docker api
     // spawn async process to handle events
     tokio::spawn(async {
-        docker_connection::setup_container(event_sink).await
+        docker_coms::setup_container(event_sink).await
     });
 
     // start the application
@@ -77,7 +77,7 @@ async fn main() {
     println!("app closing now");
 
     docker.stop_container(
-        docker_connection::CONTAINER_NAME,
+        docker_coms::CONTAINER_NAME,
         Some(StopContainerOptions{t: 5})
     ).await.unwrap();
 }
