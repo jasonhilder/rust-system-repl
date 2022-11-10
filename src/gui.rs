@@ -51,37 +51,17 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
             //TODO set some sort of debounce
             //TODO write the text_box to file
             println!("{}", &data.text_box);
+            ctx.submit_command(docker_coms::exec_cmd(&data.text_box))
 
             /*
                 1. Investigate if you can create an Arc for this and then clone the pointer (you'd need to lock; check tokio docs)
                     then you'd be passing down a ptr clone instead of a full docker struct.
             */
-            let c = self.docker_con.clone();
 
-            if data.text_box.len() > 0 {
-                tokio::spawn(async move {
-                    let x = c
-                        .create_exec(
-                            docker_coms::CONTAINER_NAME,
-                            CreateExecOptions {
-                                attach_stdout: Some(true),
-                                attach_stderr: Some(true),
-                                cmd: Some(vec!["node", "rusty-repl/node/main.js"]),
-                                ..Default::default()
-                            },
-                        )
-                        .await.unwrap()
-                        .id;
-
-                        if let StartExecResults::Attached { mut output, .. } = c.start_exec(&x, None).await.unwrap() {
-                            while let Some(Ok(msg)) = output.next().await {
-                                print!("{}", msg);
-                            }
-                        } else {
-                            unreachable!();
-                    }
-                });
-            }
+            // let c = self.docker_con.clone();
+            // if data.text_box.len() > 0 {
+            //     tokio::spawn(async move {
+            // }
             // println!("{}", out.status);
             // println!("stderr: {}", String::from_utf8_lossy(&out.stderr));
         }

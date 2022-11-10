@@ -32,6 +32,17 @@ impl AppDelegate<AppState> for Delegate {
             println!("Hand1");
             data.loading_msg = msg.clone();
             Handled::Yes
+
+        } else if let Some(code) = cmd.get(docker_coms::DOCKER_EXEC) {
+            //println!("execute this code:\n {}", code);
+
+            let x = code.clone();
+            tokio::spawn(async {
+                docker_coms::docker_exec_program(x).await;
+            });
+
+            Handled::Yes
+
         } else {
             println!("Hand2");
             Handled::No
@@ -45,6 +56,11 @@ async fn main() {
     // connect to docker in main app
     let docker = Docker::connect_with_local_defaults().unwrap();
 
+    // describe the main window
+    let main_window = build_window();
+    let launcher = AppLauncher::with_window(main_window);
+    let event_sink = launcher.get_external_handle();
+
     // create the initial app state
     let initial_state = AppState {
         import_box_chars: 0,
@@ -54,13 +70,6 @@ async fn main() {
         loading: false,
         loading_msg: "".to_string()
     };
-
-    // describe the main window
-    let main_window = build_window();
-
-    let launcher = AppLauncher::with_window(main_window);
-
-    let event_sink = launcher.get_external_handle();
 
     println!("before");
 
