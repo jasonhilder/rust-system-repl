@@ -22,6 +22,7 @@ use std::fs::File;
 use std::io::Read;
 
 const IMAGE: &str = "rusty-repl-image";
+const LOCAL_PATH: &str = "/Users/jasonhilder/rusty-repl";
 pub const CONTAINER_NAME: &str = "rusty-repl";
 pub const UPDATE_MSG: Selector<String> = Selector::new("update_message");
 pub const DOCKER_EXEC: Selector<String> = Selector::new("exec_docker");
@@ -32,7 +33,6 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
     let docker = Docker::connect_with_local_defaults();
 
     if let Ok(docker) = docker {
-
         let mut filters = HashMap::new();
         filters.insert("name", vec![CONTAINER_NAME]);
 
@@ -74,7 +74,6 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
             //and add node to it
             create_container(&docker, event_sink).await
         }
-
     } else {
         eprintln!("failed to connect to docker");
     }
@@ -87,7 +86,7 @@ async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
         dockerfile: "Dockerfile".to_string(),
         t: IMAGE.to_string(),
         pull: true,
-        rm: false,
+        rm: true,
         ..Default::default()
     };
 
@@ -111,7 +110,7 @@ async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
             vec![
                 Mount {
                     target: Some("/rusty-rep".to_string()),
-                    source: Some("/home/jason/rusty-tester".to_string()),
+                    source: Some(LOCAL_PATH.to_string()),
                     typ: Some(MountTypeEnum::BIND),
                     consistency: Some(String::from("default")),
                     ..Default::default()
@@ -147,8 +146,9 @@ async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
 pub async fn docker_exec_program(code: String) -> Option<String> {
     let docker = Docker::connect_with_local_defaults().unwrap();
 
+    let file_path = format!("{}/main.js", LOCAL_PATH);
     // first write to file
-    fs::write("/home/jason/rusty-tester/main.js", code).expect("Unable to write file");
+    fs::write(file_path, code).expect("Unable to write file");
 
     // execute node
     let x = docker.create_exec(

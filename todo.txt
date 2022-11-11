@@ -1,20 +1,27 @@
 TODO:
-- create a critical error modal for panic messages etc
+[BACKEND]
 - setup error handling strategy
-- split code logically
-- setup tmp location in docker
-- toggle error output on window
+
+[UI]
+- create a critical error modal for panic messages etc
 - make a textbox none editable
 - get tab key working
+- toggle error output on window
 
 WORKING ON:
-- on startup set containerid so we can exec into it from anypoint
-- setup volume on create
-- create language setup functions, node, rust etc
-- run node setupfunction
-- shutdown function -> stop docker image
+- split code logically
 
 DONE:
 - setup a loading status for the ui and a global message to inform user whats happening
 - use docker crate to create/start/stop
 - on app startup, startup function -> sets up base docker image
+- shutdown function -> stop docker image
+- setup volume on create
+
+
+
+
+NOTES:
+- store gui config (mac/linux .config... windows??)
+	- stores the last selected language so on startup it creates/starts the right container.
+	- fonts, colors ... etc
