@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs};
 
 use bollard::{
     Docker,
-    image::CreateImageOptions,
+    image::BuildImageOptions,
     container::{
         ListContainersOptions,
         StartContainerOptions,
@@ -12,15 +12,19 @@ use bollard::{
     exec::{
         StartExecResults,
         CreateExecOptions
-    }
+    }, service::{Mount, HostConfig, MountTypeEnum}
 };
 
-use druid::{Target, Selector};
+use druid::{Target, Selector, Command};
 use futures_util::{TryStreamExt, StreamExt};
 
-const IMAGE: &str = "alpine:latest";
+use std::fs::File;
+use std::io::Read;
+
+const IMAGE: &str = "rusty-repl-image";
 pub const CONTAINER_NAME: &str = "rusty-repl";
 pub const UPDATE_MSG: Selector<String> = Selector::new("update_message");
+pub const DOCKER_EXEC: Selector<String> = Selector::new("exec_docker");
 
 pub async fn setup_container(event_sink: druid::ExtEventSink) {
     println!("starting setup");
@@ -65,6 +69,7 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
             }
 
         } else {
+            println!("creating container");
             //container does not exist, create it
             //and add node to it
             create_container(&docker, event_sink).await
@@ -76,26 +81,49 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
 }
 
 async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
-    update_ui_detail_msg(&event_sink, "downloading");
+    update_ui_detail_msg(&event_sink, "building image...");
 
-    docker
-        .create_image(
-            Some(CreateImageOptions {
-                from_image: IMAGE,
-                ..Default::default()
-            }),
-            None,
-            None,
-        )
-        .try_collect::<Vec<_>>()
-        .await.unwrap();
+    let options = BuildImageOptions{
+        dockerfile: "Dockerfile".to_string(),
+        t: IMAGE.to_string(),
+        pull: true,
+        rm: false,
+        ..Default::default()
+    };
+
+    let mut file = File::open("./docker_files/node.tar.gz").unwrap();
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents).unwrap();
+
+    docker.build_image(options, None, Some(contents.into())).try_collect::<Vec<_>>().await.unwrap();
 
     let container_ops = CreateContainerOptions {
         name:CONTAINER_NAME,
     };
 
+    let mut mount_points:HashMap<String, HashMap<(), ()>>  = HashMap::new();
+    let mut mount_paths = HashMap::new();
+    mount_paths.insert((), ());
+    mount_points.insert(String::from("rusty-tester:/rusty-rep"), mount_paths);
+
+    let host_cfg = HostConfig {
+        mounts: Some(
+            vec![
+                Mount {
+                    target: Some("/rusty-rep".to_string()),
+                    source: Some("/home/jason/rusty-tester".to_string()),
+                    typ: Some(MountTypeEnum::BIND),
+                    consistency: Some(String::from("default")),
+                    ..Default::default()
+                }
+            ]
+        ),
+        ..Default::default()
+    };
+
     let alpine_config = Config {
         image: Some(IMAGE),
+        host_config: Some(host_cfg),
         tty: Some(true),
         attach_stdin: Some(true),
         attach_stdout: Some(true),
@@ -111,58 +139,47 @@ async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
         println!("completed setup");
         update_ui_detail_msg(&event_sink, "completed setup");
 
-        // non interactive exec setup node
-        let setup_node = docker
-            .create_exec(
-                CONTAINER_NAME,
-                CreateExecOptions {
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    cmd: Some(vec!["apk", "add", "--update", "nodejs", "npm"]),
-                    ..Default::default()
-                },
-            )
-            .await.unwrap()
-            .id;
-
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&setup_node, None).await.unwrap() {
-            while let Some(Ok(msg)) = output.next().await {
-                print!("{}", msg);
-                update_ui_detail_msg(&event_sink, &msg.to_string());
-            }
-        } else {
-            unreachable!();
-        }
-
-        // create temp folder location
-        let setup_node_path = docker
-            .create_exec(
-                CONTAINER_NAME,
-                CreateExecOptions {
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    cmd: Some(vec![
-                        "mkdir", "-p", "rusty-repl/node/",
-                        "&&", "touch","rusty-repl/node/main.js"
-                    ]),
-                    ..Default::default()
-                },
-            )
-            .await.unwrap()
-            .id;
-
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&setup_node_path, None).await.unwrap() {
-            while let Some(Ok(msg)) = output.next().await {
-                print!("{}", msg);
-                update_ui_detail_msg(&event_sink, &msg.to_string());
-            }
-        } else {
-            unreachable!();
-        }
-
     } else {
         eprintln!("failed to start docker container")
     }
+}
+
+pub async fn docker_exec_program(code: String) -> Option<String> {
+    let docker = Docker::connect_with_local_defaults().unwrap();
+
+    // first write to file
+    fs::write("/home/jason/rusty-tester/main.js", code).expect("Unable to write file");
+
+    // execute node
+    let x = docker.create_exec(
+        CONTAINER_NAME,
+        CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["node", "rusty-rep/main.js"]),
+            ..Default::default()
+        },
+    )
+    .await.unwrap()
+    .id;
+
+    if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+        while let Some(Ok(msg)) = output.next().await {
+            print!("execute {}", msg);
+            return Some(msg.to_string());
+        }
+        None
+    } else {
+        unreachable!();
+    }
+}
+
+pub fn exec_cmd(code: &String) -> Command {
+    Command::new(
+        DOCKER_EXEC,
+        code.clone(),
+        Target::Auto
+    )
 }
 
 fn update_ui_detail_msg(event_sink: &druid::ExtEventSink, message: &str) {

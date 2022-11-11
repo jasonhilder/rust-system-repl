@@ -1,6 +1,7 @@
 mod gui;
 mod docker_coms;
 
+use futures_util::FutureExt;
 use gui::{build_window, AppState};
 use bollard::{
     Docker,
@@ -15,6 +16,7 @@ use druid::{
     DelegateCtx,
     Handled
 };
+use tokio::spawn;
 
 struct Delegate;
 
@@ -28,23 +30,20 @@ impl AppDelegate<AppState> for Delegate {
         _env: &Env,
     ) -> Handled {
         if let Some(msg) = cmd.get(docker_coms::UPDATE_MSG) {
-            // If the command we received is `FINISH_SLOW_FUNCTION` handle the payload.
-            println!("Hand1");
             data.loading_msg = msg.clone();
             Handled::Yes
 
         } else if let Some(code) = cmd.get(docker_coms::DOCKER_EXEC) {
             //println!("execute this code:\n {}", code);
-
             let x = code.clone();
-            tokio::spawn(async {
-                docker_coms::docker_exec_program(x).await;
-            });
+
+            let res = spawn(async {
+                let x = docker_coms::docker_exec_program(x).await.unwrap();
+                x
+            }).boxed_local();
 
             Handled::Yes
-
         } else {
-            println!("Hand2");
             Handled::No
         }
     }

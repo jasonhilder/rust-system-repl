@@ -1,5 +1,4 @@
 use crate::docker_coms;
-use bollard::{Docker, exec::{CreateExecOptions, StartExecResults}};
 use druid::{
     LocalizedString,
     Widget,
@@ -18,7 +17,6 @@ use druid::{
         Spinner, Controller
     }
 };
-use futures_util::StreamExt;
 
 const WINDOW_TITLE: LocalizedString<AppState> = LocalizedString::new("RJSI");
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
@@ -33,9 +31,7 @@ pub struct AppState {
     pub loading_msg: String,
 }
 
-struct ExecuteNodeCode {
-    docker_con: Docker
-}
+struct ExecuteNodeCode;
 
 impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
     fn event(
@@ -57,21 +53,11 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
                 1. Investigate if you can create an Arc for this and then clone the pointer (you'd need to lock; check tokio docs)
                     then you'd be passing down a ptr clone instead of a full docker struct.
             */
-
-            // let c = self.docker_con.clone();
-            // if data.text_box.len() > 0 {
-            //     tokio::spawn(async move {
-            // }
-            // println!("{}", out.status);
-            // println!("stderr: {}", String::from_utf8_lossy(&out.stderr));
         }
     }
 }
 
 fn build_app() -> impl Widget<AppState> {
-    // connect to docker in main app
-    let docker = Docker::connect_with_local_defaults().unwrap();
-
     let imports_box = TextBox::multiline()
         .with_placeholder("Npm Imports")
         .expand_width()
@@ -83,9 +69,7 @@ fn build_app() -> impl Widget<AppState> {
         .expand_width()
         .expand_height()
         .lens(AppState::text_box)
-        .controller(ExecuteNodeCode{
-            docker_con: docker
-        });
+        .controller(ExecuteNodeCode);
 
     let loading = Spinner::new()
         .expand_width()
