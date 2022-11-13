@@ -15,19 +15,19 @@ use bollard::{
     }, service::{Mount, HostConfig, MountTypeEnum}
 };
 
-use druid::{Target, Selector, Command};
+use druid::{Target, Command};
 use futures_util::{TryStreamExt, StreamExt};
 
 use std::fs::File;
 use std::io::Read;
 
-const IMAGE: &str = "rusty-repl-image";
-const LOCAL_PATH: &str = "/Users/jasonhilder/rusty-repl";
-pub const CONTAINER_NAME: &str = "rusty-repl";
-pub const UPDATE_MSG: Selector<String> = Selector::new("update_message");
-pub const DOCKER_EXEC: Selector<String> = Selector::new("exec_docker");
+use crate::RsrEvent;
 
-pub async fn setup_container(event_sink: druid::ExtEventSink) {
+const IMAGE: &str = "rusty-repl-image";
+const LOCAL_PATH: &str = "/home/jason/rusty-tester/";
+pub const CONTAINER_NAME: &str = "rusty-repl";
+
+pub async fn setup_container(event_sink: &druid::ExtEventSink) {
     println!("starting setup");
 
     let docker = Docker::connect_with_local_defaults();
@@ -46,7 +46,7 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
 
         if container_list.len() > 0 {
             event_sink.submit_command(
-                UPDATE_MSG,
+                crate::UPDATE_MSG,
                 "starting container...".to_string(),
                 Target::Auto
             ).expect("command failed to submit");
@@ -59,7 +59,7 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
 
             if container_state.is_ok() {
                 event_sink.submit_command(
-                    UPDATE_MSG,
+                    crate::UPDATE_MSG,
                     "container running".to_string(),
                     Target::Auto
                 ).expect("command failed to submit");
@@ -79,7 +79,7 @@ pub async fn setup_container(event_sink: druid::ExtEventSink) {
     }
 }
 
-async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
+async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
     update_ui_detail_msg(&event_sink, "building image...");
 
     let options = BuildImageOptions{
@@ -143,6 +143,29 @@ async fn create_container(docker: &Docker, event_sink: druid::ExtEventSink) {
     }
 }
 
+pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
+
+    let es = event_sink.clone();
+
+    match e {
+        RsrEvent::Exec(code) => {
+            tokio::spawn(async move {
+                let std_out = docker_exec_program(code).await;
+
+                if let Some(out) = std_out {
+                    es.submit_command(
+                        crate::UPDATE_OUTPUT,
+                        out.to_string(),
+                        Target::Auto
+                    ).expect("command failed to submit");
+                }
+            });
+
+            ()
+        }
+    }
+}
+
 pub async fn docker_exec_program(code: String) -> Option<String> {
     let docker = Docker::connect_with_local_defaults().unwrap();
 
@@ -174,17 +197,17 @@ pub async fn docker_exec_program(code: String) -> Option<String> {
     }
 }
 
-pub fn exec_cmd(code: &String) -> Command {
+pub fn submit_rsr_event(event: RsrEvent) -> Command {
     Command::new(
-        DOCKER_EXEC,
-        code.clone(),
+        crate::RSR_EVENT,
+        event,
         Target::Auto
     )
 }
 
 fn update_ui_detail_msg(event_sink: &druid::ExtEventSink, message: &str) {
     event_sink.submit_command(
-        UPDATE_MSG,
+        crate::UPDATE_MSG,
         message.to_string(),
         Target::Auto
     ).expect("command failed to submit");

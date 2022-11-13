@@ -1,4 +1,7 @@
-use crate::{docker_coms, JEvent};
+use crate::{
+    docker_coms,
+    RsrEvent
+};
 use druid::{
     LocalizedString,
     Widget,
@@ -16,7 +19,7 @@ use druid::{
         TextBox,
         Spinner, Controller
     }
-}; 
+};
 
 const WINDOW_TITLE: LocalizedString<AppState> = LocalizedString::new("RJSI");
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
@@ -28,7 +31,7 @@ pub struct AppState {
     pub text_box: String,
     pub output_box: String,
     pub loading: bool,
-    pub loading_msg: String, 
+    pub loading_msg: String,
 }
 
 struct ExecuteNodeCode;
@@ -47,11 +50,7 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
             //TODO set some sort of debounce
             //TODO write the text_box to file
             println!("{}", &data.text_box);
-            ctx.submit_command(docker_coms::exec_cmd(&data.text_box))
-            /*
-                1. Investigate if you can create an Arc for this and then clone the pointer (you'd need to lock; check tokio docs)
-                    then you'd be passing down a ptr clone instead of a full docker struct.
-            */
+            ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone())))
         }
     }
 }
@@ -80,7 +79,7 @@ fn build_app() -> impl Widget<AppState> {
         .expand_height()
         .lens(AppState::loading_msg);
 
-    let output_box = TextBox::new()
+    let output_box = TextBox::multiline()
         .with_placeholder("Output")
         .expand_width()
         .expand_height()
