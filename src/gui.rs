@@ -34,9 +34,11 @@ pub struct AppState {
     pub loading_msg: String,
 }
 
-struct ExecuteNodeCode;
+struct Execute {
+    widget_type: &'static str
+}
 
-impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
+impl<W: Widget<AppState>> Controller<AppState, W> for Execute {
     fn event(
         &mut self,
         child: &mut W,
@@ -48,9 +50,11 @@ impl<W: Widget<AppState>> Controller<AppState, W> for ExecuteNodeCode {
         child.event(ctx, event, data, env);
         if let Event::KeyDown(_) = event {
             //TODO set some sort of debounce
-            //TODO write the text_box to file
-            println!("{}", &data.text_box);
-            ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone())))
+            match self.widget_type {
+                "import_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))),
+                "code_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone()))),
+                _ => {}
+            }
         }
     }
 }
@@ -60,14 +64,16 @@ fn build_app() -> impl Widget<AppState> {
         .with_placeholder("Npm Imports")
         .expand_width()
         .expand_height()
-        .lens(AppState::import_box);
+        .lens(AppState::import_box)
+        .controller(Execute{ widget_type: "import_box" });
+
 
     let text_box = TextBox::multiline()
         .with_placeholder("Code here")
         .expand_width()
         .expand_height()
         .lens(AppState::text_box)
-        .controller(ExecuteNodeCode);
+        .controller(Execute{ widget_type: "code_box" });
 
     let loading = Spinner::new()
         .expand_width()

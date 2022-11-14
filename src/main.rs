@@ -64,6 +64,7 @@ impl AppDelegate<AppState> for Delegate {
 #[derive(Clone)]
 pub enum RsrEvent {
     Exec(String), // <- send this straight to eh docker container
+    ImportLibs(String)
 }
 
 #[tokio::main]

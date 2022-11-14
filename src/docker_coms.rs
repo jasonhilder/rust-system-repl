@@ -1,5 +1,7 @@
-use std::{collections::HashMap, fs};
-
+use std::{
+    collections::HashMap,
+    fs
+};
 use bollard::{
     Docker,
     image::BuildImageOptions,
@@ -14,10 +16,14 @@ use bollard::{
         CreateExecOptions
     }, service::{Mount, HostConfig, MountTypeEnum}
 };
-
-use druid::{Target, Command};
-use futures_util::{TryStreamExt, StreamExt};
-
+use druid::{
+    Target,
+    Command
+};
+use futures_util::{
+    TryStreamExt,
+    StreamExt
+};
 use std::fs::File;
 use std::io::Read;
 
@@ -162,7 +168,52 @@ pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
             });
 
             ()
+        },
+        RsrEvent::ImportLibs(imports) => {
+            tokio::spawn(async move {
+                println!("imports: {}", imports);
+                let std_out = docker_import_libs(imports).await;
+                println!("std out: {:?}", std_out);
+            });
+
+            ()
         }
+    }
+}
+
+pub async fn docker_import_libs(imports: String) -> Option<String> {
+    let docker = Docker::connect_with_local_defaults().unwrap();
+
+    let mut import_command = vec!["cd", "/rusty-rep"];
+
+    // for imprt in imports.split("\n").into_iter() {
+    //     import_command.push(imprt)
+    // }
+    println!("cmd: {:#?}", import_command);
+
+    let x = docker.create_exec(
+        CONTAINER_NAME,
+        CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(import_command),
+            ..Default::default()
+        },
+    )
+    .await.unwrap()
+    .id;
+
+    if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+        let mut txt = String::new();
+
+        while let Some(Ok(msg)) = output.next().await {
+            txt.push_str(&msg.to_string());
+        }
+
+        //println!("output = {}", txt);
+        Some(txt)
+    } else {
+        unreachable!();
     }
 }
 
@@ -171,7 +222,7 @@ pub async fn docker_exec_program(code: String) -> Option<String> {
 
     let file_path = format!("{}/main.js", LOCAL_PATH);
     // first write to file
-    fs::write(file_path, code).expect("Unable to write file");
+    fs::write(file_path, code.trim()).expect("Unable to write file");
 
     // execute node
     let x = docker.create_exec(
@@ -187,11 +238,13 @@ pub async fn docker_exec_program(code: String) -> Option<String> {
     .id;
 
     if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+        let mut txt = String::new();
+
         while let Some(Ok(msg)) = output.next().await {
-            print!("execute {}", msg);
-            return Some(msg.to_string());
+            txt.push_str(&msg.to_string());
         }
-        None
+        //println!("output = {}", txt);
+        Some(txt)
     } else {
         unreachable!();
     }
