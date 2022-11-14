@@ -184,11 +184,12 @@ pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
 pub async fn docker_import_libs(imports: String) -> Option<String> {
     let docker = Docker::connect_with_local_defaults().unwrap();
 
-    let mut import_command = vec!["cd", "/rusty-rep"];
+    let mut import_command = vec!["npm", "i"];
 
-    // for imprt in imports.split("\n").into_iter() {
-    //     import_command.push(imprt)
-    // }
+    for imprt in imports.split("\n").into_iter() {
+        import_command.push(imprt)
+    }
+
     println!("cmd: {:#?}", import_command);
 
     let x = docker.create_exec(
@@ -197,6 +198,7 @@ pub async fn docker_import_libs(imports: String) -> Option<String> {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             cmd: Some(import_command),
+            working_dir: Some("/rusty-rep"),
             ..Default::default()
         },
     )
