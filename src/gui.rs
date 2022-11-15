@@ -32,6 +32,7 @@ pub struct AppState {
     pub output_box: String,
     pub loading: bool,
     pub loading_msg: String,
+    pub processing: bool
 }
 
 struct Execute {
@@ -48,13 +49,38 @@ impl<W: Widget<AppState>> Controller<AppState, W> for Execute {
         env: &Env,
     ) {
         child.event(ctx, event, data, env);
+
+        use std::thread;
+        use std::time::Duration;
+        use std::sync::mpsc;
+
+        let (send, recv) = mpsc::channel();
+        let mut typing = false;
+
         if let Event::KeyDown(_) = event {
-            //TODO set some sort of debounce
-            match self.widget_type {
-                "import_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))),
-                "code_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone()))),
-                _ => {}
+            fn execer() {
+                println!("debounce finish");
             }
+
+            thread::spawn(move || {
+                // When you want to sleep
+                if let Ok(_) = recv.recv_timeout (Duration::from_secs (2)) {
+                    // Sleep was interrupted
+                    println!("interrupt");
+                    return;
+                }
+                return execer();
+            });
+
+            // And elsewhere when you want to interrupt the thread:
+            send.send(());
+
+            //TODO set some sort of debounce
+            // match self.widget_type {
+            //     "import_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))),
+            //     "code_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone()))),
+            //     _ => {}
+            // }
         }
     }
 }

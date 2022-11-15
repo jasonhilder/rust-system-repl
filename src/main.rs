@@ -48,6 +48,7 @@ impl AppDelegate<AppState> for Delegate {
             Handled::Yes
         } else if let Some(event) = cmd.get(RSR_EVENT) {
             //println!("execute this code:\n {}", code);
+
             let r_event = event.clone();
             let ev = self.tx.send(r_event);
 
@@ -86,7 +87,8 @@ async fn main() {
         text_box: "".to_string(),
         output_box: "".to_string(),
         loading_msg: "".to_string(),
-        loading: false
+        loading: false,
+        processing: false
     };
 
     // works with tokio spawn rather than thread::spawn
