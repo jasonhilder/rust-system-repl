@@ -32,12 +32,11 @@ pub struct AppState {
     pub output_box: String,
     pub loading: bool,
     pub loading_msg: String,
-    pub processing: bool
+    pub processing: bool,
+    pub edited_timestamp: u64
 }
 
-struct Execute {
-    widget_type: &'static str
-}
+struct Execute;
 
 impl<W: Widget<AppState>> Controller<AppState, W> for Execute {
     fn event(
@@ -50,37 +49,10 @@ impl<W: Widget<AppState>> Controller<AppState, W> for Execute {
     ) {
         child.event(ctx, event, data, env);
 
-        use std::thread;
-        use std::time::Duration;
-        use std::sync::mpsc;
-
-        let (send, recv) = mpsc::channel();
-        let mut typing = false;
-
         if let Event::KeyDown(_) = event {
-            fn execer() {
-                println!("debounce finish");
+            if !data.processing {
+                ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone())));
             }
-
-            thread::spawn(move || {
-                // When you want to sleep
-                if let Ok(_) = recv.recv_timeout (Duration::from_secs (2)) {
-                    // Sleep was interrupted
-                    println!("interrupt");
-                    return;
-                }
-                return execer();
-            });
-
-            // And elsewhere when you want to interrupt the thread:
-            send.send(());
-
-            //TODO set some sort of debounce
-            // match self.widget_type {
-            //     "import_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))),
-            //     "code_box" => ctx.submit_command(docker_coms::submit_rsr_event(RsrEvent::Exec(data.text_box.clone()))),
-            //     _ => {}
-            // }
         }
     }
 }
@@ -90,16 +62,14 @@ fn build_app() -> impl Widget<AppState> {
         .with_placeholder("Npm Imports")
         .expand_width()
         .expand_height()
-        .lens(AppState::import_box)
-        .controller(Execute{ widget_type: "import_box" });
-
+        .lens(AppState::import_box);
 
     let text_box = TextBox::multiline()
         .with_placeholder("Code here")
         .expand_width()
         .expand_height()
         .lens(AppState::text_box)
-        .controller(Execute{ widget_type: "code_box" });
+        .controller(Execute);
 
     let loading = Spinner::new()
         .expand_width()

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs
+    fs, thread::sleep, time::Duration
 };
 use bollard::{
     Docker,
@@ -156,12 +156,25 @@ pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
     match e {
         RsrEvent::Exec(code) => {
             tokio::spawn(async move {
+                println!("execing!");
+                es.submit_command(
+                    crate::START_PROCESSING,
+                    None,
+                    Target::Auto
+                ).expect("command failed to submit");
+
                 let std_out = docker_exec_program(code).await;
 
                 if let Some(out) = std_out {
                     es.submit_command(
                         crate::UPDATE_OUTPUT,
                         out.to_string(),
+                        Target::Auto
+                    ).expect("command failed to submit");
+
+                    es.submit_command(
+                        crate::END_PROCESSING,
+                        None,
                         Target::Auto
                     ).expect("command failed to submit");
                 }

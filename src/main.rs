@@ -1,34 +1,19 @@
-mod gui;
 mod docker_coms;
+mod gui;
 
-use std::sync::mpsc::{
-    Sender,
-    channel
-};
-use gui::{
-    build_window,
-    AppState
-};
-use bollard::{
-    Docker,
-    container::StopContainerOptions
-};
-use druid::{
-    AppDelegate,
-    AppLauncher,
-    Command,
-    Env,
-    Target,
-    DelegateCtx,
-    Handled, Selector
-};
+use bollard::{container::StopContainerOptions, Docker};
+use druid::{AppDelegate, AppLauncher, Command, DelegateCtx, Env, Handled, Selector, Target};
+use gui::{build_window, AppState};
+use std::sync::mpsc::{channel, Sender};
 
 struct Delegate {
-    tx: Sender<RsrEvent>
+    tx: Sender<RsrEvent>,
 }
 
 pub const UPDATE_MSG: Selector<String> = Selector::new("update_message");
 pub const UPDATE_OUTPUT: Selector<String> = Selector::new("update_output");
+pub const END_PROCESSING: Selector<Option<&str>> = Selector::new("end_processing");
+pub const START_PROCESSING: Selector<Option<&str>> = Selector::new("start_processing");
 pub const RSR_EVENT: Selector<RsrEvent> = Selector::new("exec_docker");
 
 impl AppDelegate<AppState> for Delegate {
@@ -46,9 +31,17 @@ impl AppDelegate<AppState> for Delegate {
         } else if let Some(out) = cmd.get(UPDATE_OUTPUT) {
             data.output_box = out.clone();
             Handled::Yes
+        } else if let Some(_) = cmd.get(START_PROCESSING) {
+            println!("starting to process");
+            data.processing = true;
+            data.edited_timestamp = 1;
+            Handled::Yes
+        } else if let Some(_) = cmd.get(END_PROCESSING) {
+            println!("ending process");
+            data.processing = false;
+            data.edited_timestamp = 1;
+            Handled::Yes
         } else if let Some(event) = cmd.get(RSR_EVENT) {
-            //println!("execute this code:\n {}", code);
-
             let r_event = event.clone();
             let ev = self.tx.send(r_event);
 
@@ -65,12 +58,12 @@ impl AppDelegate<AppState> for Delegate {
 #[derive(Clone)]
 pub enum RsrEvent {
     Exec(String), // <- send this straight to eh docker container
-    ImportLibs(String)
+    ImportLibs(String),
 }
 
 #[tokio::main]
 async fn main() {
-    let (tx,rx) = channel::<RsrEvent>();
+    let (tx, rx) = channel::<RsrEvent>();
 
     // connect to docker in main app
     let docker = Docker::connect_with_local_defaults().unwrap();
@@ -88,7 +81,8 @@ async fn main() {
         output_box: "".to_string(),
         loading_msg: "".to_string(),
         loading: false,
-        processing: false
+        processing: false,
+        edited_timestamp: 0
     };
 
     // works with tokio spawn rather than thread::spawn
@@ -102,15 +96,19 @@ async fn main() {
                 docker_coms::docker_handle_event(event, &event_sink)
             }
         }
-
     });
 
     // start the application
-    launcher.delegate(Delegate {tx}).launch(initial_state).expect("Failed to launch application");
-    println!("app closing now");
+    launcher
+        .delegate(Delegate { tx })
+        .launch(initial_state)
+        .expect("Failed to launch application");
 
-    docker.stop_container(
-        docker_coms::CONTAINER_NAME,
-        Some(StopContainerOptions{t: 5})
-    ).await.unwrap();
+    docker
+        .stop_container(
+            docker_coms::CONTAINER_NAME,
+            Some(StopContainerOptions { t: 5 }),
+        )
+        .await
+        .unwrap();
 }
