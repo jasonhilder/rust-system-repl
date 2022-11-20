@@ -21,12 +21,13 @@ use druid::{
         Spinner,
         Controller,
         Button,
-        Label
+        Label,
+        Tabs
     }
 };
 
 const WINDOW_TITLE: LocalizedString<AppState> = LocalizedString::new("RJSI");
-const VERTICAL_WIDGET_SPACING: f64 = 20.0;
+//const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 
 #[derive(Clone, Data, Lens)]
 pub struct AppState {
@@ -62,10 +63,15 @@ impl<W: Widget<AppState>> Controller<AppState, W> for Execute {
 }
 
 fn build_app() -> impl Widget<AppState> {
-
     let show_logs = Button::from_label(Label::new("logs")
         .with_text_color(Color::grey(0.5)))
         .on_click(|_ctx, data: &mut AppState, _env| {});
+
+    let import_btn = Button::from_label(Label::new("Import Libraries")
+        .with_text_color(Color::grey(0.5)))
+        .on_click(|_ctx, data: &mut AppState, _env| {
+            docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()));
+        });
 
     let imports_box = TextBox::multiline()
         .with_placeholder("Npm Imports")
@@ -73,12 +79,22 @@ fn build_app() -> impl Widget<AppState> {
         .expand_height()
         .lens(AppState::import_box);
 
+    let import_container = Flex::column()
+        .with_flex_child(imports_box, 95.0)
+        .with_default_spacer()
+        .with_flex_child(import_btn, 5.0)
+        .expand_width();
+
     let text_box = TextBox::multiline()
         .with_placeholder("Code here")
         .expand_width()
         .expand_height()
         .lens(AppState::text_box)
         .controller(Execute);
+
+    let text_tabs = Tabs::new()
+        .with_tab("Code", text_box)
+        .with_tab("Libs", import_container);
 
     let loading = Spinner::new()
         .expand_width()
@@ -97,13 +113,10 @@ fn build_app() -> impl Widget<AppState> {
         .lens(AppState::output_box);
 
     let left_column = Flex::column()
-        .with_flex_child(imports_box, 20.0)
-        .with_spacer(VERTICAL_WIDGET_SPACING)
-        .with_flex_child(text_box, 80.0)
+        .with_flex_child(text_tabs, 100.0)
         .padding(5.0)
         .expand_height()
         .expand_width();
-
 
     let right_column = Flex::column()
         .with_flex_child(output_box, 100.0)
