@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs, thread::sleep, time::Duration
+    fs
 };
 use bollard::{
     Docker,
@@ -69,6 +69,8 @@ pub async fn setup_container(event_sink: &druid::ExtEventSink) {
                     "container running".to_string(),
                     Target::Auto
                 ).expect("command failed to submit");
+
+                docker_handle_imports(event_sink);
                 return
             } else {
                 eprintln!("failed to connect to docker");
@@ -78,8 +80,10 @@ pub async fn setup_container(event_sink: &druid::ExtEventSink) {
             println!("creating container");
             //container does not exist, create it
             //and add node to it
-            create_container(&docker, event_sink).await
+            create_container(&docker, event_sink).await;
+            docker_handle_imports(event_sink);
         }
+
     } else {
         eprintln!("failed to connect to docker");
     }
@@ -194,16 +198,24 @@ pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
     }
 }
 
-pub async fn docker_import_libs(imports: String) -> Option<String> {
+fn docker_handle_imports(event_sink: &druid::ExtEventSink) {
+    let file_path = format!("{}/package.json", LOCAL_PATH);
+    // first write to file
+    let fc = fs::read_to_string(file_path).expect("Unable to read file");
+
+    set_import_text(event_sink, fc.as_str());
+}
+
+pub async fn docker_import_libs(import_txt: String) -> Option<String> {
+    println!("importing libs");
+
     let docker = Docker::connect_with_local_defaults().unwrap();
 
-    let mut import_command = vec!["npm", "i"];
+    let file_path = format!("{}/package.json", LOCAL_PATH);
+    // first write to file
+    fs::write(file_path, import_txt).expect("Unable to write file");
 
-    for imprt in imports.split("\n").into_iter() {
-        import_command.push(imprt)
-    }
-
-    println!("cmd: {:#?}", import_command);
+    let import_command = vec!["npm", "i"];
 
     let x = docker.create_exec(
         CONTAINER_NAME,
@@ -277,6 +289,14 @@ fn update_ui_detail_msg(event_sink: &druid::ExtEventSink, message: &str) {
     event_sink.submit_command(
         crate::UPDATE_MSG,
         message.to_string(),
+        Target::Auto
+    ).expect("command failed to submit");
+}
+
+fn set_import_text(event_sink: &druid::ExtEventSink, file_content: &str) {
+    event_sink.submit_command(
+        crate::SETUP_IMPORTS,
+        file_content.to_string(),
         Target::Auto
     ).expect("command failed to submit");
 }

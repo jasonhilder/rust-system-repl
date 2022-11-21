@@ -69,8 +69,11 @@ fn build_app() -> impl Widget<AppState> {
 
     let import_btn = Button::from_label(Label::new("Import Libraries")
         .with_text_color(Color::grey(0.5)))
-        .on_click(|_ctx, data: &mut AppState, _env| {
-            docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()));
+        .expand_width()
+        .on_click(|ctx, data: &mut AppState, _env| {
+            ctx.submit_command(
+                docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))
+            );
         });
 
     let imports_box = TextBox::multiline()

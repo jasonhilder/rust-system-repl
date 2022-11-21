@@ -11,6 +11,7 @@ struct Delegate {
 }
 
 pub const UPDATE_MSG: Selector<String> = Selector::new("update_message");
+pub const SETUP_IMPORTS: Selector<String> = Selector::new("setup_imports");
 pub const UPDATE_OUTPUT: Selector<String> = Selector::new("update_output");
 pub const END_PROCESSING: Selector<Option<&str>> = Selector::new("end_processing");
 pub const START_PROCESSING: Selector<Option<&str>> = Selector::new("start_processing");
@@ -27,6 +28,10 @@ impl AppDelegate<AppState> for Delegate {
     ) -> Handled {
         if let Some(msg) = cmd.get(UPDATE_MSG) {
             data.loading_msg = msg.clone();
+            Handled::Yes
+        } else if let Some(txt) = cmd.get(SETUP_IMPORTS) {
+            println!("setting imprt");
+            data.import_box = txt.clone();
             Handled::Yes
         } else if let Some(out) = cmd.get(UPDATE_OUTPUT) {
             data.output_box = out.clone();
@@ -107,7 +112,7 @@ async fn main() {
     docker
         .stop_container(
             docker_coms::CONTAINER_NAME,
-            Some(StopContainerOptions { t: 5 }),
+            Some(StopContainerOptions { t: 2 }),
         )
         .await
         .unwrap();
