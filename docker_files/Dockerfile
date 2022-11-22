@@ -1,5 +1,7 @@
-# syntax=docker/dockerfile:1
-FROM node:lts-alpine
-RUN mkdir -p /rusty-rep
-RUN cd /rusty-rep && \
-    npm init -y
+FROM node:lts-slim
+
+RUN mkdir /rusty-rep
+RUN echo "" > /rusty-rep/main.js
+
+RUN cd /rusty-rep \
+    && npm init -y

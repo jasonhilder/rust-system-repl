@@ -92,6 +92,9 @@ pub async fn setup_container(event_sink: &druid::ExtEventSink) {
 async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
     update_ui_detail_msg(&event_sink, "building image...");
 
+    // create local folder
+    fs::create_dir_all(LOCAL_PATH).unwrap();
+
     let options = BuildImageOptions{
         dockerfile: "Dockerfile".to_string(),
         t: IMAGE.to_string(),
