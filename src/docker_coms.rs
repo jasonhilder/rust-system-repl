@@ -20,10 +20,7 @@ use druid::{
     Target,
     Command
 };
-use futures_util::{
-    TryStreamExt,
-    StreamExt
-};
+use futures_util::StreamExt;
 use std::fs::File;
 use std::io::Read;
 
@@ -107,7 +104,7 @@ async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents).unwrap();
 
-    docker.build_image(options, None, Some(contents.into())).try_collect::<Vec<_>>().await.unwrap();
+    docker.build_image(options, None, Some(contents.into())).for_each(|x| async move { println!("{:?}", x)}).await;
 
     let container_ops = CreateContainerOptions {
         name:CONTAINER_NAME,
@@ -149,6 +146,59 @@ async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
 
     if has_started.is_ok() {
         println!("completed setup");
+
+        let x = docker.create_exec(
+            CONTAINER_NAME,
+            CreateExecOptions {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec!["mv", "package.json", "main.js", "rusty-rep/"]),
+                ..Default::default()
+            },
+        )
+        .await.unwrap()
+        .id;
+
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+            let mut txt = String::new();
+
+            while let Some(Ok(msg)) = output.next().await {
+                txt.push_str(&msg.to_string());
+            }
+
+            println!("startup output = {}", txt);
+            //Some(txt)
+        } else {
+            unreachable!();
+        }
+
+
+        let y = docker.create_exec(
+            CONTAINER_NAME,
+            CreateExecOptions {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec!["chmod", "777", "main.js", "package.json"]),
+                working_dir: Some("/rusty-rep"),
+                ..Default::default()
+            },
+        )
+        .await.unwrap()
+        .id;
+
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&y, None).await.unwrap() {
+            let mut txt = String::new();
+
+            while let Some(Ok(msg)) = output.next().await {
+                txt.push_str(&msg.to_string());
+            }
+
+            println!("startup output = {}", txt);
+            //Some(txt)
+        } else {
+            unreachable!();
+        }
+
         update_ui_detail_msg(&event_sink, "completed setup");
 
     } else {

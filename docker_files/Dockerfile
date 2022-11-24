@@ -1,7 +1,6 @@
 FROM node:lts-slim
 
-RUN mkdir /rusty-rep
-RUN echo "" > /rusty-rep/main.js
+RUN touch main.js && \
+    npm init -y
 
-RUN cd /rusty-rep \
-    && npm init -y
+RUN mkdir rusty-rep
