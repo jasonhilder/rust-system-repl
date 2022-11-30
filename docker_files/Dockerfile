@@ -1,6 +1,11 @@
 FROM node:lts-slim
 
-RUN touch main.js && \
-    npm init -y
+USER root
 
-RUN mkdir rusty-rep
+VOLUME /rusty-rep
+
+ADD test.sh /
+
+RUN touch main.js && npm init -y
+
+CMD /test.sh && tail -f /dev/null
