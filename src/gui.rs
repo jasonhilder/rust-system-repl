@@ -71,9 +71,11 @@ fn build_app() -> impl Widget<AppState> {
         .with_text_color(Color::grey(0.5)))
         .expand_width()
         .on_click(|ctx, data: &mut AppState, _env| {
+            println!("one");
             ctx.submit_command(
                 docker_coms::submit_rsr_event(RsrEvent::ImportLibs(data.import_box.clone()))
             );
+            println!("two");
         });
 
     let imports_box = TextBox::multiline()

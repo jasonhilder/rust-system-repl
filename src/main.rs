@@ -4,7 +4,7 @@ mod gui;
 use bollard::{container::StopContainerOptions, Docker};
 use druid::{AppDelegate, AppLauncher, Command, DelegateCtx, Env, Handled, Selector, Target};
 use gui::{build_window, AppState};
-use std::sync::mpsc::{channel, Sender};
+use std::{sync::mpsc::{channel, Sender}, process};
 
 struct Delegate {
     tx: Sender<RsrEvent>,
@@ -60,10 +60,11 @@ impl AppDelegate<AppState> for Delegate {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RsrEvent {
     Exec(String), // <- send this straight to eh docker container
     ImportLibs(String),
+    Start()
 }
 
 #[tokio::main]
@@ -90,24 +91,36 @@ async fn main() {
         edited_timestamp: 0
     };
 
+
+    // start the docker container
+    //&event_sink.submit_command(RSR_EVENT, RsrEvent::Start(), Target::Auto);
+
     // works with tokio spawn rather than thread::spawn
     // as I need an async function for docker api
     // spawn async process to handle events
     tokio::spawn(async move {
-        docker_coms::setup_container(&event_sink).await;
+        let docker = Docker::connect_with_local_defaults();
 
-        loop {
-            if let Ok(event) = rx.try_recv() {
-                docker_coms::docker_handle_event(event, &event_sink)
+        if let Ok(docker) = docker {
+            docker_coms::setup_container(&event_sink, &docker).await;
+
+            loop {
+                if let Ok(event) = rx.try_recv() {
+                    docker_coms::docker_handle_event(event, &event_sink, &docker);
+                }
             }
+        } else {
+            eprintln!("Failed to connect to docker");
         }
     });
 
     // start the application
     launcher
+        .use_simple_logger()
         .delegate(Delegate { tx })
         .launch(initial_state)
         .expect("Failed to launch application");
+
 
     docker
         .stop_container(
@@ -116,4 +129,7 @@ async fn main() {
         )
         .await
         .unwrap();
+
+    // kill process when docker stops
+    process::exit(0);
 }

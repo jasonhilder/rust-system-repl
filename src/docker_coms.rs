@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs, thread::sleep, time::Duration
+    fs
 };
 use bollard::{
     Docker,
@@ -20,6 +20,9 @@ use druid::{
     Target,
     Command
 };
+
+use tokio::runtime::Handle;
+use tokio::task;
 use futures_util::StreamExt;
 use std::fs::File;
 use std::io::Read;
@@ -29,60 +32,54 @@ const IMAGE: &str = "rusty-rep/nodejs";
 const LOCAL_PATH: &str = "/home/jason/rusty-tester/";
 pub const CONTAINER_NAME: &str = "rusty-repl";
 
-pub async fn setup_container(event_sink: &druid::ExtEventSink) {
+pub async fn setup_container(event_sink: &druid::ExtEventSink, docker_connection: &Docker) {
     println!("starting setup");
 
-    let docker = Docker::connect_with_local_defaults();
+    let mut filters = HashMap::new();
+    filters.insert("name", vec![CONTAINER_NAME]);
 
-    if let Ok(docker) = docker {
-        let mut filters = HashMap::new();
-        filters.insert("name", vec![CONTAINER_NAME]);
+    let options = Some(ListContainersOptions{
+        all: true,
+        filters,
+        ..Default::default()
+    });
 
-        let options = Some(ListContainersOptions{
-            all: true,
-            filters,
-            ..Default::default()
-        });
+    let container_list = docker_connection.list_containers(options).await.unwrap();
 
-        let container_list = docker.list_containers(options).await.unwrap();
+    if container_list.len() > 0 {
+        event_sink.submit_command(
+            crate::UPDATE_MSG,
+            "starting container...".to_string(),
+            Target::Auto
+        ).expect("command failed to submit");
 
-        if container_list.len() > 0 {
+        // container exists just start it.
+        let container_state = docker_connection.start_container(
+            CONTAINER_NAME,
+            None::<StartContainerOptions<String>>
+        ).await;
+
+        if container_state.is_ok() {
             event_sink.submit_command(
                 crate::UPDATE_MSG,
-                "starting container...".to_string(),
+                "container running".to_string(),
                 Target::Auto
             ).expect("command failed to submit");
 
-            // container exists just start it.
-            let container_state = docker.start_container(
-                CONTAINER_NAME,
-                None::<StartContainerOptions<String>>
-            ).await;
-
-            if container_state.is_ok() {
-                event_sink.submit_command(
-                    crate::UPDATE_MSG,
-                    "container running".to_string(),
-                    Target::Auto
-                ).expect("command failed to submit");
-
-                docker_handle_imports(event_sink);
-                return
-            } else {
-                eprintln!("failed to connect to docker");
-            }
-
-        } else {
-            println!("creating container");
-            //container does not exist, create it
-            //and add node to it
-            create_container(&docker, event_sink).await;
             docker_handle_imports(event_sink);
+            return
+        } else {
+            eprintln!("failed to connect to docker");
         }
 
     } else {
-        eprintln!("failed to connect to docker");
+        println!("creating container");
+        //container does not exist, create it
+        //and add node to it
+        create_container(&docker_connection, event_sink).await;
+        docker_handle_imports(event_sink);
     }
+
 }
 
 async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
@@ -146,82 +143,77 @@ async fn create_container(docker: &Docker, event_sink: &druid::ExtEventSink) {
 
     if has_started.is_ok() {
         println!("completed setup");
-
-        // let y = docker.create_exec(
-        //     CONTAINER_NAME,
-        //     CreateExecOptions {
-        //         attach_stdout: Some(true),
-        //         attach_stderr: Some(true),
-        //         working_dir: Some("/rusty-rep"),
-        //         cmd: Some(vec!["chmod", "777", "main.js", "package.json"]),
-        //         ..Default::default()
-        //     },
-        // )
-        // .await.unwrap()
-        // .id;
-
-        // if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&y, None).await.unwrap() {
-        //     let mut txt = String::new();
-
-        //     while let Some(Ok(msg)) = output.next().await {
-        //         txt.push_str(&msg.to_string());
-        //     }
-
-        //     println!("startup output = {}", txt);
-        //     //Some(txt)
-        // } else {
-        //     unreachable!();
-        // }
-
         update_ui_detail_msg(&event_sink, "completed setup");
-
     } else {
         eprintln!("failed to start docker container")
     }
 }
 
-pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink) {
+pub fn docker_handle_event(e: RsrEvent, event_sink: &druid::ExtEventSink, docker: &Docker) {
 
+    println!("in handler");
+    println!("{:?}", e);
     let es = event_sink.clone();
 
     match e {
         RsrEvent::Exec(code) => {
-            tokio::spawn(async move {
-                println!("execing!");
-                es.submit_command(
-                    crate::START_PROCESSING,
-                    None,
-                    Target::Auto
-                ).expect("command failed to submit");
-
-                let std_out = docker_exec_program(code).await;
-
-                if let Some(out) = std_out {
+            task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    println!("execing!");
                     es.submit_command(
-                        crate::UPDATE_OUTPUT,
-                        out.to_string(),
-                        Target::Auto
-                    ).expect("command failed to submit");
-
-                    es.submit_command(
-                        crate::END_PROCESSING,
+                        crate::START_PROCESSING,
                         None,
                         Target::Auto
                     ).expect("command failed to submit");
-                }
+
+                    let std_out = docker_exec_program(code, docker).await;
+
+                    if let Some(out) = std_out {
+                        es.submit_command(
+                            crate::UPDATE_OUTPUT,
+                            out.to_string(),
+                            Target::Auto
+                        ).expect("command failed to submit");
+
+                        es.submit_command(
+                            crate::END_PROCESSING,
+                            None,
+                            Target::Auto
+                        ).expect("command failed to submit");
+                    }
+                })
             });
 
             ()
         },
         RsrEvent::ImportLibs(imports) => {
-            tokio::spawn(async move {
-                println!("imports: {}", imports);
-                let std_out = docker_import_libs(imports).await;
-                println!("std out: {:?}", std_out);
+            println!("running here1");
+
+            task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let std_out = docker_import_libs(imports, docker).await;
+                    println!("std out: {:?}", std_out);
+
+                    if let Some(res) = std_out {
+                        es.submit_command(
+                            crate::UPDATE_OUTPUT,
+                            res,
+                            Target::Auto
+                        ).expect("command failed to submit");
+                    }
+                });
             });
 
             ()
+        },
+        RsrEvent::Start() => {
+            task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    setup_container(&es, docker).await;
+                })
+            });
         }
+
     }
 }
 
@@ -233,10 +225,9 @@ fn docker_handle_imports(event_sink: &druid::ExtEventSink) {
     set_import_text(event_sink, fc.as_str());
 }
 
-pub async fn docker_import_libs(import_txt: String) -> Option<String> {
+pub async fn docker_import_libs(import_txt: String, docker_connection: &Docker) -> Option<String> {
     println!("importing libs");
 
-    let docker = Docker::connect_with_local_defaults().unwrap();
 
     let file_path = format!("{}/package.json", LOCAL_PATH);
     // first write to file
@@ -244,7 +235,7 @@ pub async fn docker_import_libs(import_txt: String) -> Option<String> {
 
     let import_command = vec!["npm", "i"];
 
-    let x = docker.create_exec(
+    let x = docker_connection.create_exec(
         CONTAINER_NAME,
         CreateExecOptions {
             attach_stdout: Some(true),
@@ -257,29 +248,27 @@ pub async fn docker_import_libs(import_txt: String) -> Option<String> {
     .await.unwrap()
     .id;
 
-    if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+    if let StartExecResults::Attached { mut output, .. } = docker_connection.start_exec(&x, None).await.unwrap() {
         let mut txt = String::new();
 
         while let Some(Ok(msg)) = output.next().await {
             txt.push_str(&msg.to_string());
         }
 
-        //println!("output = {}", txt);
         Some(txt)
     } else {
         unreachable!();
     }
 }
 
-pub async fn docker_exec_program(code: String) -> Option<String> {
-    let docker = Docker::connect_with_local_defaults().unwrap();
+pub async fn docker_exec_program(code: String, docker_connection: &Docker) -> Option<String> {
 
     let file_path = format!("{}/main.js", LOCAL_PATH);
     // first write to file
     fs::write(file_path, code.trim()).expect("Unable to write file");
 
     // execute node
-    let x = docker.create_exec(
+    let x = docker_connection.create_exec(
         CONTAINER_NAME,
         CreateExecOptions {
             attach_stdout: Some(true),
@@ -291,13 +280,13 @@ pub async fn docker_exec_program(code: String) -> Option<String> {
     .await.unwrap()
     .id;
 
-    if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&x, None).await.unwrap() {
+    if let StartExecResults::Attached { mut output, .. } = docker_connection.start_exec(&x, None).await.unwrap() {
         let mut txt = String::new();
 
         while let Some(Ok(msg)) = output.next().await {
             txt.push_str(&msg.to_string());
         }
-        //println!("output = {}", txt);
+
         Some(txt)
     } else {
         unreachable!();
